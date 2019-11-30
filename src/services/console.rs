@@ -1,8 +1,11 @@
 //! This module contains a service implementation to use browser's console.
 
+#[allow(unused_imports)]
+use stdweb::{_js_impl, js};
+
 /// A service to use methods of a
 /// [Console](https://developer.mozilla.org/en-US/docs/Web/API/Console).
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ConsoleService {}
 
 impl ConsoleService {

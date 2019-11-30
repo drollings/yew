@@ -1,47 +1,26 @@
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
-#[macro_use]
-extern crate log;
-extern crate web_logger;
-extern crate strum;
-#[macro_use]
-extern crate strum_macros;
-#[macro_use]
-extern crate yew;
-extern crate counter;
-extern crate crm;
-extern crate custom_components;
-extern crate dashboard;
-extern crate fragments;
-extern crate game_of_life;
-extern crate inner_html;
-extern crate large_table;
-extern crate mount_point;
-extern crate npm_and_rest;
-extern crate routing;
-extern crate textarea;
-extern crate timer;
-extern crate todomvc;
-extern crate two_apps;
-
-use strum::IntoEnumIterator;
-use yew::components::Select;
-use yew::prelude::*;
 use counter::Model as Counter;
 use crm::Model as Crm;
 use custom_components::Model as CustomComponents;
 use dashboard::Model as Dashboard;
+use node_refs::Model as NodeRefs;
 use fragments::Model as Fragments;
 use game_of_life::Model as GameOfLife;
 use inner_html::Model as InnerHtml;
 use large_table::Model as LargeTable;
+use log::trace;
 use mount_point::Model as MountPoint;
 use npm_and_rest::Model as NpmAndRest;
 use routing::Model as Routing;
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter, EnumString};
 use textarea::Model as Textarea;
 use timer::Model as Timer;
 use todomvc::Model as Todomvc;
 use two_apps::Model as TwoApps;
+use yew::components::Select;
+use yew::{html, App, Component, ComponentLink, Html, ShouldRender};
 
 #[derive(Clone, Debug, Display, EnumString, EnumIter, PartialEq)]
 enum Scene {
@@ -49,6 +28,7 @@ enum Scene {
     Crm,
     CustomComponents,
     Dashboard,
+    NodeRefs,
     Fragments,
     GameOfLife,
     InnerHtml,
@@ -75,9 +55,7 @@ impl Component for Model {
     type Properties = ();
 
     fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
-        Self {
-            scene: None,
-        }
+        Self { scene: None }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
@@ -88,21 +66,18 @@ impl Component for Model {
             }
         }
     }
-}
 
-impl Renderable<Model> for Model {
     fn view(&self) -> Html<Self> {
         html! {
-            <div id="fullscreen",>
-                <div id="left_pane",>
+            <div id="fullscreen">
+                <div id="left_pane">
                     <h2>{ "Yew showcase" }</h2>
-                    <Select<Scene>:
-                        selected=self.scene.clone(),
-                        options=Scene::iter().collect::<Vec<_>>(),
-                        onchange=Msg::SwitchTo,
-                        />
+                    <Select<Scene>
+                        selected=self.scene.clone()
+                        options=Scene::iter().collect::<Vec<_>>()
+                        onchange=Msg::SwitchTo />
                 </div>
-                <div id="right_pane",>
+                <div id="right_pane">
                     { self.view_scene() }
                 </div>
             </div>
@@ -114,81 +89,22 @@ impl Model {
     fn view_scene(&self) -> Html<Self> {
         if let Some(scene) = self.scene.as_ref() {
             match scene {
-                Scene::Counter => {
-                    html! {
-                        <Counter: />
-                    }
-                }
-                Scene::Crm => {
-                    html! {
-                        <Crm: />
-                    }
-                }
-                Scene::CustomComponents => {
-                    html! {
-                        <CustomComponents: />
-                    }
-                }
-                Scene::Dashboard => {
-                    html! {
-                        <Dashboard: />
-                    }
-                }
-                Scene::Fragments => {
-                    html! {
-                        <Fragments: />
-                    }
-                }
-                Scene::GameOfLife => {
-                    html! {
-                        <GameOfLife: />
-                    }
-                }
-                Scene::InnerHtml => {
-                    html! {
-                        <InnerHtml: />
-                    }
-                }
-                Scene::LargeTable => {
-                    html! {
-                        <LargeTable: />
-                    }
-                }
-                Scene::MountPoint => {
-                    html! {
-                        <MountPoint: />
-                    }
-                }
-                Scene::NpmAndRest => {
-                    html! {
-                        <NpmAndRest: />
-                    }
-                }
-                Scene::Routing => {
-                    html! {
-                        <Routing: />
-                    }
-                }
-                Scene::Textarea => {
-                    html! {
-                        <Textarea: />
-                    }
-                }
-                Scene::Timer => {
-                    html! {
-                        <Timer: />
-                    }
-                }
-                Scene::Todomvc => {
-                    html! {
-                        <Todomvc: />
-                    }
-                }
-                Scene::TwoApps => {
-                    html! {
-                        <TwoApps: />
-                    }
-                }
+                Scene::Counter => html! { <Counter /> },
+                Scene::Crm => html! { <Crm /> },
+                Scene::CustomComponents => html! { <CustomComponents /> },
+                Scene::Dashboard => html! { <Dashboard /> },
+                Scene::NodeRefs => html! { <NodeRefs /> },
+                Scene::Fragments => html! { <Fragments /> },
+                Scene::GameOfLife => html! { <GameOfLife /> },
+                Scene::InnerHtml => html! { <InnerHtml /> },
+                Scene::LargeTable => html! { <LargeTable /> },
+                Scene::MountPoint => html! { <MountPoint /> },
+                Scene::NpmAndRest => html! { <NpmAndRest /> },
+                Scene::Routing => html! { <Routing /> },
+                Scene::Textarea => html! { <Textarea /> },
+                Scene::Timer => html! { <Timer /> },
+                Scene::Todomvc => html! { <Todomvc /> },
+                Scene::TwoApps => html! { <TwoApps /> },
             }
         } else {
             html! {
@@ -209,4 +125,3 @@ fn main() {
     trace!("Run");
     yew::run_loop();
 }
-

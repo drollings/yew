@@ -1,23 +1,21 @@
+use log::info;
+use serde_derive::{Deserialize, Serialize};
 use std::time::Duration;
-use yew::prelude::worker::*;
+use yew::worker::*;
 // TODO use yew::services::{IntervalService, FetchService, Task};
-use yew::services::Task;
-use yew::services::interval::IntervalService;
 use yew::services::fetch::FetchService;
+use yew::services::interval::IntervalService;
+use yew::services::Task;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
     GetDataFromServer,
 }
 
-impl Transferable for Request { }
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
     DataFetched,
 }
-
-impl Transferable for Response { }
 
 pub enum Msg {
     Updating,
@@ -26,7 +24,7 @@ pub enum Msg {
 pub struct Worker {
     link: AgentLink<Worker>,
     interval: IntervalService,
-    task: Box<Task>,
+    task: Box<dyn Task>,
     fetch: FetchService,
 }
 
@@ -66,4 +64,3 @@ impl Agent for Worker {
         }
     }
 }
-

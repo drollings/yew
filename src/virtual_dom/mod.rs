@@ -6,16 +6,17 @@ pub mod vnode;
 pub mod vtag;
 pub mod vtext;
 
-use std::collections::{HashMap, HashSet};
+use indexmap::set::IndexSet;
+use std::collections::HashMap;
 use std::fmt;
 use stdweb::web::{Element, EventListenerHandle, Node};
 
-pub use self::vcomp::VComp;
+pub use self::vcomp::{VChild, VComp};
 pub use self::vlist::VList;
 pub use self::vnode::VNode;
 pub use self::vtag::VTag;
 pub use self::vtext::VText;
-use html::{Component, Scope};
+use crate::html::{Component, Scope};
 
 /// `Listener` trait is an universal implementation of an event listener
 /// which helps to bind Rust-listener to JS-listener (DOM).
@@ -23,7 +24,7 @@ pub trait Listener<COMP: Component> {
     /// Returns standard name of DOM's event.
     fn kind(&self) -> &'static str;
     /// Attaches listener to the element and uses scope instance to send
-    /// prepaired event back to the yew main loop.
+    /// prepared event back to the yew main loop.
     fn attach(&mut self, element: &Element, scope: Scope<COMP>) -> EventListenerHandle;
 }
 
@@ -40,7 +41,79 @@ type Listeners<COMP> = Vec<Box<dyn Listener<COMP>>>;
 type Attributes = HashMap<String, String>;
 
 /// A set of classes.
-type Classes = HashSet<String>;
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Classes {
+    set: IndexSet<String>,
+}
+
+impl Classes {
+    /// Creates empty set of classes.
+    pub fn new() -> Self {
+        Self {
+            set: IndexSet::new(),
+        }
+    }
+
+    /// Adds a class to a set.
+    ///
+    /// Prevents duplication of class names.
+    pub fn push(&mut self, class: &str) {
+        self.set.insert(class.into());
+    }
+
+    /// Check the set contains a class.
+    pub fn contains(&self, class: &str) -> bool {
+        self.set.contains(class)
+    }
+
+    /// Adds other classes to this set of classes; returning itself.
+    ///
+    /// Takes the logical union of both `Classes`.
+    pub fn extend<T: Into<Classes>>(mut self, other: T) -> Self {
+        self.set.extend(other.into().set.into_iter());
+        self
+    }
+}
+
+impl ToString for Classes {
+    fn to_string(&self) -> String {
+        let mut buf = String::new();
+        for class in &self.set {
+            buf.push_str(class);
+            buf.push(' ');
+        }
+        buf.pop();
+        buf
+    }
+}
+
+impl From<&str> for Classes {
+    fn from(t: &str) -> Self {
+        let set = t.split_whitespace().map(String::from).collect();
+        Self { set }
+    }
+}
+
+impl From<String> for Classes {
+    fn from(t: String) -> Self {
+        let set = t.split_whitespace().map(String::from).collect();
+        Self { set }
+    }
+}
+
+impl From<&String> for Classes {
+    fn from(t: &String) -> Self {
+        let set = t.split_whitespace().map(String::from).collect();
+        Self { set }
+    }
+}
+
+impl<T: AsRef<str>> From<Vec<T>> for Classes {
+    fn from(t: Vec<T>) -> Self {
+        let set = t.iter().map(|x| x.as_ref().to_string()).collect();
+        Self { set }
+    }
+}
 
 /// Patch for DOM node modification.
 enum Patch<ID, T> {
@@ -61,8 +134,8 @@ enum Reform {
     /// The optional `Node` is used to insert the
     /// new node in the correct slot of the parent.
     ///
-    /// If it does not exist, a `precursor` must be
-    /// speccified (see `VDiff::apply()`).
+    /// If it does not exist, a `previous_sibling` must be
+    /// specified (see `VDiff::apply()`).
     Before(Option<Node>),
 }
 
@@ -70,26 +143,26 @@ enum Reform {
 // In makes possible to include ANY element into the tree.
 // `Ace` editor embedding for example?
 
-/// This trait provides features to update a tree by other tree comparsion.
+/// This trait provides features to update a tree by calculating a difference against another tree.
 pub trait VDiff {
     /// The component which this instance put into.
     type Component: Component;
 
     /// Remove itself from parent and return the next sibling.
-    fn detach(&mut self, parent: &Node) -> Option<Node>;
+    fn detach(&mut self, parent: &Element) -> Option<Node>;
 
     /// Scoped diff apply to other tree.
     ///
     /// Virtual rendering for the node. It uses parent node and existing children (virtual and DOM)
-    /// to check the difference and apply patches to the actual DOM represenatation.
+    /// to check the difference and apply patches to the actual DOM representation.
     ///
     /// Parameters:
     /// - `parent`: the parent node in the DOM.
-    /// - `precursor`: the "previous node" in a list of nodes, used to efficiently
+    /// - `previous_sibling`: the "previous node" in a list of nodes, used to efficiently
     ///   find where to put the node.
     /// - `ancestor`: the node that this node will be replacing in the DOM.
     ///   This method will _always_ remove the `ancestor` from the `parent`.
-    /// - `env`: the `Env`.
+    /// - `parent_scope`: the parent `Scope` used for passing messages to the parent `Component`.
     ///
     /// ### Internal Behavior Notice:
     ///
@@ -101,9 +174,9 @@ pub trait VDiff {
     /// (always removes the `Node` that exists).
     fn apply(
         &mut self,
-        parent: &Node,
-        precursor: Option<&Node>,
+        parent: &Element,
+        previous_sibling: Option<&Node>,
         ancestor: Option<VNode<Self::Component>>,
-        scope: &Scope<Self::Component>,
+        parent_scope: &Scope<Self::Component>,
     ) -> Option<Node>;
 }

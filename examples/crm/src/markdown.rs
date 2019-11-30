@@ -1,11 +1,8 @@
-
 /// Original author of this code is [Nathan Ringo](https://github.com/remexre)
 /// Source: https://github.com/acmumn/mentoring/blob/master/web-client/src/view/markdown.rs
-
 use pulldown_cmark::{Alignment, Event, Parser, Tag, OPTION_ENABLE_TABLES};
-use yew::html::Html;
-use yew::html::Component;
 use yew::virtual_dom::{VNode, VTag, VText};
+use yew::{html, Component, Html};
 
 /// Renders a string of Markdown to HTML with the default options (footnotes
 /// disabled, tables enabled).
@@ -20,8 +17,8 @@ where
         ($child:expr) => {{
             let l = spine.len();
             assert_ne!(l, 0);
-            spine[l-1].add_child($child);
-        }}
+            spine[l - 1].add_child($child);
+        }};
     }
 
     for ev in Parser::new_ext(src, OPTION_ENABLE_TABLES) {
@@ -39,9 +36,9 @@ where
                     pre.add_child(top.into());
                     top = pre;
                 } else if let Tag::Table(aligns) = tag {
-                    for r in top.childs.iter_mut() {
+                    for r in top.children.iter_mut() {
                         if let &mut VNode::VTag(ref mut vtag) = r {
-                            for (i, c) in vtag.childs.iter_mut().enumerate() {
+                            for (i, c) in vtag.children.iter_mut().enumerate() {
                                 if let &mut VNode::VTag(ref mut vtag) = c {
                                     match aligns[i] {
                                         Alignment::None => {}
@@ -54,7 +51,7 @@ where
                         }
                     }
                 } else if let Tag::TableHead = tag {
-                    for c in top.childs.iter_mut() {
+                    for c in top.children.iter_mut() {
                         if let &mut VNode::VTag(ref mut vtag) = c {
                             // TODO
                             //                            vtag.tag = "th".into();
@@ -76,7 +73,7 @@ where
     }
 
     if elems.len() == 1 {
-        VNode::VTag(elems.pop().unwrap())
+        VNode::VTag(Box::new(elems.pop().unwrap()))
     } else {
         html! {
             <div>{ for elems.into_iter() }</div>
@@ -159,6 +156,6 @@ where
             }
             el
         }
-        Tag::FootnoteDefinition(ref _footnote_id) => VTag::new("span") // Footnotes are not rendered as anything special
+        Tag::FootnoteDefinition(ref _footnote_id) => VTag::new("span"), // Footnotes are not rendered as anything special
     }
 }

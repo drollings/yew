@@ -2,16 +2,26 @@
 //! periodic sending messages to a loop.
 
 use super::{to_ms, Task};
-use callback::Callback;
+use crate::callback::Callback;
+use std::fmt;
 use std::time::Duration;
 use stdweb::Value;
+#[allow(unused_imports)]
+use stdweb::{_js_impl, js};
 
 /// A handle which helps to cancel interval. Uses
 /// [clearInterval](https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/clearInterval).
+#[must_use]
 pub struct IntervalTask(Option<Value>);
 
+impl fmt::Debug for IntervalTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("IntervalTask")
+    }
+}
+
 /// A service to send messages on every elapsed interval.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct IntervalService {}
 
 impl IntervalService {

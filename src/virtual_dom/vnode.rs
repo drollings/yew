@@ -1,15 +1,16 @@
 //! This module contains the implementation of abstract virtual node.
 
-use super::{VComp, VDiff, VList, VTag, VText};
-use html::{Component, Renderable, Scope};
+use super::{VChild, VComp, VDiff, VList, VTag, VText};
+use crate::html::{Component, Renderable, Scope};
 use std::cmp::PartialEq;
 use std::fmt;
-use stdweb::web::{INode, Node};
+use std::iter::FromIterator;
+use stdweb::web::{Element, INode, Node};
 
 /// Bind virtual element to a DOM reference.
 pub enum VNode<COMP: Component> {
     /// A bind between `VTag` and `Element`.
-    VTag(VTag<COMP>),
+    VTag(Box<VTag<COMP>>),
     /// A bind between `VText` and `TextNode`.
     VText(VText<COMP>),
     /// A bind between `VComp` and `Element`.
@@ -24,7 +25,7 @@ impl<COMP: Component> VDiff for VNode<COMP> {
     type Component = COMP;
 
     /// Remove VNode from parent.
-    fn detach(&mut self, parent: &Node) -> Option<Node> {
+    fn detach(&mut self, parent: &Element) -> Option<Node> {
         match *self {
             VNode::VTag(ref mut vtag) => vtag.detach(parent),
             VNode::VText(ref mut vtext) => vtext.detach(parent),
@@ -42,16 +43,24 @@ impl<COMP: Component> VDiff for VNode<COMP> {
 
     fn apply(
         &mut self,
-        parent: &Node,
-        precursor: Option<&Node>,
+        parent: &Element,
+        previous_sibling: Option<&Node>,
         ancestor: Option<VNode<Self::Component>>,
-        env: &Scope<Self::Component>,
+        parent_scope: &Scope<Self::Component>,
     ) -> Option<Node> {
         match *self {
-            VNode::VTag(ref mut vtag) => vtag.apply(parent, precursor, ancestor, env),
-            VNode::VText(ref mut vtext) => vtext.apply(parent, precursor, ancestor, env),
-            VNode::VComp(ref mut vcomp) => vcomp.apply(parent, precursor, ancestor, env),
-            VNode::VList(ref mut vlist) => vlist.apply(parent, precursor, ancestor, env),
+            VNode::VTag(ref mut vtag) => {
+                vtag.apply(parent, previous_sibling, ancestor, parent_scope)
+            }
+            VNode::VText(ref mut vtext) => {
+                vtext.apply(parent, previous_sibling, ancestor, parent_scope)
+            }
+            VNode::VComp(ref mut vcomp) => {
+                vcomp.apply(parent, previous_sibling, ancestor, parent_scope)
+            }
+            VNode::VList(ref mut vlist) => {
+                vlist.apply(parent, previous_sibling, ancestor, parent_scope)
+            }
             VNode::VRef(ref mut node) => {
                 let sibling = match ancestor {
                     Some(mut n) => n.detach(parent),
@@ -71,6 +80,12 @@ impl<COMP: Component> VDiff for VNode<COMP> {
     }
 }
 
+impl<COMP: Component> Default for VNode<COMP> {
+    fn default() -> Self {
+        VNode::VList(VList::default())
+    }
+}
+
 impl<COMP: Component> From<VText<COMP>> for VNode<COMP> {
     fn from(vtext: VText<COMP>) -> Self {
         VNode::VText(vtext)
@@ -85,13 +100,23 @@ impl<COMP: Component> From<VList<COMP>> for VNode<COMP> {
 
 impl<COMP: Component> From<VTag<COMP>> for VNode<COMP> {
     fn from(vtag: VTag<COMP>) -> Self {
-        VNode::VTag(vtag)
+        VNode::VTag(Box::new(vtag))
     }
 }
 
 impl<COMP: Component> From<VComp<COMP>> for VNode<COMP> {
     fn from(vcomp: VComp<COMP>) -> Self {
         VNode::VComp(vcomp)
+    }
+}
+
+impl<COMP, CHILD> From<VChild<CHILD, COMP>> for VNode<COMP>
+where
+    COMP: Component,
+    CHILD: Component,
+{
+    fn from(vchild: VChild<CHILD, COMP>) -> Self {
+        VNode::VComp(VComp::from(vchild))
     }
 }
 
@@ -103,7 +128,17 @@ impl<COMP: Component, T: ToString> From<T> for VNode<COMP> {
 
 impl<'a, COMP: Component> From<&'a dyn Renderable<COMP>> for VNode<COMP> {
     fn from(value: &'a dyn Renderable<COMP>) -> Self {
-        value.view()
+        value.render()
+    }
+}
+
+impl<COMP: Component, A: Into<VNode<COMP>>> FromIterator<A> for VNode<COMP> {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        let vlist = iter.into_iter().fold(VList::default(), |mut acc, x| {
+            acc.add_child(x.into());
+            acc
+        });
+        VNode::VList(vlist)
     }
 }
 
@@ -121,19 +156,10 @@ impl<COMP: Component> fmt::Debug for VNode<COMP> {
 
 impl<COMP: Component> PartialEq for VNode<COMP> {
     fn eq(&self, other: &VNode<COMP>) -> bool {
-        match *self {
-            VNode::VTag(ref vtag_a) => match *other {
-                VNode::VTag(ref vtag_b) => vtag_a == vtag_b,
-                _ => false,
-            },
-            VNode::VText(ref vtext_a) => match *other {
-                VNode::VText(ref vtext_b) => vtext_a == vtext_b,
-                _ => false,
-            },
-            _ => {
-                // TODO Implement it
-                false
-            }
+        match (self, other) {
+            (VNode::VTag(vtag_a), VNode::VTag(vtag_b)) => vtag_a == vtag_b,
+            (VNode::VText(vtext_a), VNode::VText(vtext_b)) => vtext_a == vtext_b,
+            _ => false, // TODO: Implement other variants
         }
     }
 }

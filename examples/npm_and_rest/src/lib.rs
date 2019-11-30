@@ -1,22 +1,18 @@
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate serde_derive;
+#![recursion_limit = "128"]
+
 #[macro_use]
 extern crate stdweb;
-#[macro_use]
-extern crate yew;
 
 // Own services implementation
-pub mod gravatar;
 pub mod ccxt;
+pub mod gravatar;
 
 use failure::Error;
-use yew::prelude::*;
 use yew::services::fetch::FetchTask;
+use yew::{html, Callback, Component, ComponentLink, Html, ShouldRender};
 
-use gravatar::{GravatarService, Profile};
 use ccxt::CcxtService;
+use gravatar::{GravatarService, Profile};
 
 pub struct Model {
     gravatar: GravatarService,
@@ -51,7 +47,9 @@ impl Component for Model {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::Gravatar => {
-                let task = self.gravatar.profile("205e460b479e2e5b48aec07710c08d50", self.callback.clone());
+                let task = self
+                    .gravatar
+                    .profile("205e460b479e2e5b48aec07710c08d50", self.callback.clone());
                 self.task = Some(task);
             }
             Msg::GravatarReady(Ok(profile)) => {
@@ -66,17 +64,17 @@ impl Component for Model {
         }
         true
     }
-}
 
-impl Renderable<Model> for Model {
     fn view(&self) -> Html<Self> {
-        let view_exchange = |exchange| html! {
-            <li>{ exchange }</li>
+        let view_exchange = |exchange| {
+            html! {
+                <li>{ exchange }</li>
+            }
         };
         html! {
             <div>
-                <button onclick=|_| Msg::Exchanges,>{ "Get Exchanges" }</button>
-                <button onclick=|_| Msg::Gravatar,>{ "Get Gravatar" }</button>
+                <button onclick=|_| Msg::Exchanges>{ "Get Exchanges" }</button>
+                <button onclick=|_| Msg::Gravatar>{ "Get Gravatar" }</button>
                 <ul>
                     { for self.exchanges.iter().map(view_exchange) }
                 </ul>

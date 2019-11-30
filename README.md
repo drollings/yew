@@ -1,9 +1,38 @@
-[![Build Status](https://api.travis-ci.org/DenisKolodin/yew.svg)](https://travis-ci.org/DenisKolodin/yew)
-[![Gitter chat](https://badges.gitter.im/yewframework.png)](https://gitter.im/yewframework/Lobby "Gitter chat")
+<div align="center">
 
-# Yew
+  <img src="https://github.com/yewstack/yew/blob/master/.static/yew.svg" width="150" />
 
-**Yew** (pronounced `/juː/`, the same way as "you") is a modern Rust framework inspired by Elm and ReactJS for
+  <h1>
+    Yew &nbsp;
+    <a href="https://crates.io/crates/yew"><img alt="Build Status" src="https://img.shields.io/crates/v/yew.svg"/></a>
+  </h1>
+
+  <p>
+    <strong>Rust / Wasm client web app framework</strong>
+  </p>
+
+  <p>
+    <a href="https://travis-ci.com/yewstack/yew"><img alt="Build Status" src="https://travis-ci.com/yewstack/yew.svg?branch=master"/></a>
+    <a href="https://gitter.im/yewframework/Lobby"><img alt="Gitter Chat" src="https://badges.gitter.im/yewframework.svg"/></a>
+    <a href="https://blog.rust-lang.org/2019/11/07/Rust-1.39.0.html"><img alt="Rustc Version 1.39+" src="https://img.shields.io/badge/rustc-1.39+-lightgray.svg"/></a>
+  </p>
+
+  <h4>
+    <a href="https://yew.rs">Website</a>
+    <span> | </span>
+    <a href="https://docs.rs/yew">API Docs</a>
+    <span> | </span>
+    <a href="#running-the-examples">Examples</a>
+    <span> | </span>
+    <a href="https://github.com/yewstack/yew/blob/master/CHANGELOG.md">Changelog</a>
+    <span> | </span>
+    <a href="https://github.com/yewstack/yew/blob/master/CODE_OF_CONDUCT.md">Code of Conduct</a>
+  </h4>
+</div>
+
+## Overview
+
+**Yew** is a modern Rust framework inspired by Elm and React for
 creating multi-threaded frontend apps with WebAssembly.
 
 The framework supports ***multi-threading & concurrency*** out of the box.
@@ -14,24 +43,22 @@ and uses a local scheduler attached to a thread for concurrent tasks.
 
 [Become a sponsor on Patreon](https://www.patreon.com/deniskolodin)
 
+[Check out a live demo](https://yew-todomvc.netlify.com/) powered by [`yew-wasm-pack-template`](https://github.com/yewstack/yew-wasm-pack-template)
+
 ## Cutting Edge technologies
 
 ### Rust to WASM compilation
 
 This framework is designed to be compiled into modern browsers' runtimes: wasm, asm.js, emscripten.
 
-To prepare the development environment use the installation instruction here: [wasm-and-rust](https://github.com/raphamorim/wasm-and-rust).
-
-### Clean MVC approach inspired by Elm and Redux
+### Architecture inspired by Elm and Redux
 
 Yew implements strict application state management based on message passing and updates:
 
 `src/main.rs`
 
 ```rust
-#[macro_use]
-extern crate yew;
-use yew::prelude::*;
+use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 struct Model { }
 
@@ -57,21 +84,17 @@ impl Component for Model {
             }
         }
     }
-}
 
-impl Renderable<Model> for Model {
     fn view(&self) -> Html<Self> {
         html! {
             // Render your model here
-            <button onclick=|_| Msg::DoIt,>{ "Click me!" }</button>
+            <button onclick=|_| Msg::DoIt>{ "Click me!" }</button>
         }
     }
 }
 
 fn main() {
-    yew::initialize();
-    App::<Model>::new().mount_to_body();
-    yew::run_loop();
+    yew::start_app::<Model>();
 }
 ```
 
@@ -84,31 +107,30 @@ Feel free to put pure Rust code into HTML tags with all the compiler and borrow 
 
 ```rust
 html! {
-    <section class="todoapp",>
-        <header class="header",>
+    <section class="todoapp">
+        <header class="header">
             <h1>{ "todos" }</h1>
             { view_input(&model) }
         </header>
-        <section class="main",>
-            <input class="toggle-all",
-                   type="checkbox",
-                   checked=model.is_all_completed(),
-                   onclick=|_| Msg::ToggleAll, />
+        <section class="main">
+            <input class="toggle-all"
+                   type="checkbox"
+                   checked=model.is_all_completed()
+                   onclick=|_| Msg::ToggleAll />
             { view_entries(&model) }
         </section>
     </section>
 }
 ```
 
-### Agents - actors model inspired by Erlang and Actix
+### Agents - actor model inspired by Erlang and Actix
 
 Every `Component` can spawn an agent and attach to it.
-Agents are separate tasks that work concurrently.
-
-Create your worker/agent (in `context.rs` for example):
+Agents can coordinate global state, spawn long-running tasks, and offload tasks to a web worker.
+They run independently of components, but hook nicely into their update mechanism.
 
 ```rust
-use yew::prelude::worker::*;
+use yew::worker::*;
 
 struct Worker {
     link: AgentLink<Worker>,
@@ -126,15 +148,16 @@ pub enum Response {
 
 impl Agent for Worker {
     // Available:
-    // - `Job` (one per bridge)
-    // - `Context` (shared in the same thread)
-    // - `Public` (separate thread).
-    type Reach = Context; // Spawn only one instance per thread (all components could reach this)
+    // - `Job` (one per bridge on the main thread)
+    // - `Context` (shared in the main thread)
+    // - `Private` (one per bridge in a separate thread)
+    // - `Public` (shared in a separate thread)
+    type Reach = Context; // Spawn only one instance on the main thread (all components can share this agent)
     type Message = Msg;
     type Input = Request;
     type Output = Response;
 
-    // Create an instance with a link to agent's environment.
+    // Create an instance with a link to the agent.
     fn create(link: AgentLink<Self>) -> Self {
         Worker { link }
     }
@@ -182,7 +205,7 @@ You can use as many agents as you want. For example you could separate all inter
 with a server to a separate thread (a real OS thread because Web Workers map to the native threads).
 
 > **REMEMBER!** Not every API is available for every environment. For example you can't use
-`StorageService` from a separate thread. It won't work with `Public` agents,
+`StorageService` from a separate thread. It won't work with `Public` or `Private` agents,
 only with `Job` and `Context` ones.
 
 ### Components
@@ -192,9 +215,12 @@ and including it directly into the `html!` template:
 
 ```rust
 html! {
-    <nav class="menu",>
-        <MyButton: title="First Button",/>
-        <MyButton: title="Second Button",/>
+    <nav class="menu">
+        <MyButton title="First Button" />
+        <MyButton title="Second Button "/>
+        <MyList name="Grocery List">
+          <MyListItem text="Apples" />
+        </MyList>
     </nav>
 }
 ```
@@ -207,17 +233,33 @@ Components live in an Angular-like scopes with **parent-to-child** *(properties)
 Properties are also pure Rust types with strict type-checking during the compilation.
 
 ```rust
+// my_button.rs
+
+#[derive(Properties, PartialEq)]
+pub struct Properties {
+    pub hidden: bool,
+    #[props(required)]
+    pub color: Color,
+    #[props(required)]
+    pub onclick: Callback<()>,
+}
+
+```
+
+```rust
+// confirm_dialog.rs
+
 html! {
-    <nav class="menu",>
-        <MyButton: color=Color::Red,/>
-        <MyButton: onclick=|_| ParentMsg::DoIt,/>
-    </nav>
+    <div class="confirm-dialog">
+        <MyButton onclick=|_| DialogMsg::Cancel color=Color::Red hidden=true />
+        <MyButton onclick=|_| DialogMsg::Submit color=Color::Blue />
+    </div>
 }
 ```
 
 ### Fragments
 
-Yew supports fragments: elements without a parent which could be attached somewhere later.
+Yew supports fragments: elements without a parent which can be attached to one somewhere else.
 
 ```rust
 html! {
@@ -229,12 +271,9 @@ html! {
 }
 ```
 
-### Virtual DOM, independent loops, fine updates
+### Virtual DOM
 
-Yew uses its own **virtual-dom** implementation. It updates the browser's DOM
-with tiny patches when properties of elements have changed. Every component lives
-in its own independent loop interacting with the environment (`Scope`) through message passing
-and supports a fine control of rendering.
+Yew uses its own **virtual-dom** implementation. It updates the browser's DOM with tiny patches when properties of elements have changed. Every component can be interacted with using its (`Scope`) to pass messages and trigger updates.
 
 The `ShouldRender` returns the value which informs the loop when the component should be re-rendered:
 
@@ -252,9 +291,8 @@ fn update(&mut self, msg: Self::Message) -> ShouldRender {
 }
 ```
 
-Using `ShouldRender` is more effective than comparing the model after every update because not every model
-change leads to a view update. It allows the framework to skip the model comparison checks entirely.
-This also allows you to control updates as precisely as possible.
+Using `ShouldRender` is more effective than comparing the model after every update because not every change to the model
+causes an update to the view. It allows the framework to only compare parts of the model essential to rendering the view.
 
 ### Rust/JS/C-style comments in templates
 
@@ -281,7 +319,7 @@ extern crate chrono;
 use chrono::prelude::*;
 
 impl Renderable<Model> for Model {
-    fn view(&self) -> Html<Self> {
+    fn render(&self) -> Html<Self> {
         html! {
             <p>{ Local::now() }</p>
         }
@@ -289,7 +327,7 @@ impl Renderable<Model> for Model {
 }
 ```
 
-> Some crates don't support the true wasm target (`wasm32-unknown-unknown`) yet.
+> Some crates don't support the `wasm32-unknown-unknown` target yet.
 
 ### Services
 
@@ -300,11 +338,14 @@ It's a handy alternative to subscriptions.
 Implemented:
 * `IntervalService`
 * `RenderService`
+* `ResizeService`
 * `TimeoutService`
 * `StorageService`
 * `DialogService`
+* `ConsoleService`
 * `FetchService`
 * `WebSocketService`
+* `KeyboardService`
 
 ```rust
 use yew::services::{ConsoleService, TimeoutService};
@@ -331,7 +372,7 @@ impl Component for Model {
 ```
 
 Can't find an essential service? Want to use a library from `npm`?
-You can reuse `JavaScript` libraries with `stdweb` capabilities and create
+You can wrap `JavaScript` libraries using `stdweb` and create
 your own service implementation. Here's an example below of how to wrap the
 [ccxt](https://www.npmjs.com/package/ccxt) library:
 
@@ -363,7 +404,7 @@ impl CcxtService {
 
 ### Easy-to-use data conversion and destructuring
 
-Yew allows for serialization (store/send and restore/recieve) formats.
+Yew allows for serialization (store/send and restore/receive) formats.
 
 Implemented: `JSON`, `TOML`, `YAML`, `MSGPACK`, `CBOR`.
 
@@ -404,26 +445,37 @@ your project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-yew = { git = "https://github.com/DenisKolodin/yew", features = ["toml", "yaml", "msgpack", "cbor"] }
+yew = { git = "https://github.com/yewstack/yew", features = ["toml", "yaml", "msgpack", "cbor"] }
 ```
 
 ## Development setup
 
 Clone or download this repository.
 
-To build this project you need to have [cargo-web] installed:
+### Install [cargo-web]
 
-    $ cargo install cargo-web
+This is an optional tool that simplifies deploying web applications:
+
+```bash
+cargo install cargo-web
+```
 
 > Add `--force` option to ensure you install the latest version.
 
 ### Build
 
-    $ cargo web build
+```bash
+cargo web build
+
+# without cargo-web, only the wasm32-unknown-unknown target is supported
+cargo build --target wasm32-unknown-unknown
+```
 
 ### Running Tests
 
-    $ ./ci/run_tests.sh
+```bash
+./ci/run_tests.sh
+```
 
 ### Running the examples
 
@@ -433,13 +485,19 @@ There are many examples that show how the framework works:
 
 To start an example enter its directory and start it with [cargo-web]:
 
-    $ cargo web start
+```bash
+cargo web start
+```
 
 To run an optimised build instead of a debug build use:
 
-    $ cargo web start --release
+```bash
+cargo web start --release
+```
 
-This will use the `wasm32-unknown-unknown` target by default, which is Rust's native WebAssembly target. The Emscripten-based `wasm32-unknown-emscripten` and `asmjs-unknown-emscripten` targets are also supported if you tell the `cargo-web` to build for them using the `--target` parameter.
+This will use the `wasm32-unknown-unknown` target by default, which is Rust's native WebAssembly target.
+The Emscripten-based `wasm32-unknown-emscripten` and `asmjs-unknown-emscripten` targets are also supported
+if you tell the `cargo-web` to build for them using the `--target` parameter.
 
 [counter]: examples/counter
 [crm]: examples/crm
@@ -453,3 +511,9 @@ This will use the `wasm32-unknown-unknown` target by default, which is Rust's na
 [todomvc]: examples/todomvc
 [two_apps]: examples/two_apps
 [cargo-web]: https://github.com/koute/cargo-web
+
+
+## Project templates
+
+* [`yew-wasm-pack-template`](https://github.com/yewstack/yew-wasm-pack-template)
+* [`yew-wasm-pack-minimal`](https://github.com/yewstack/yew-wasm-pack-minimal)

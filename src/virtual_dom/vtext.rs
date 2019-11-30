@@ -1,15 +1,16 @@
 //! This module contains the implementation of a virtual text node `VText`.
 
+use super::{Reform, VDiff, VNode};
+use crate::html::{Component, Scope};
+use log::warn;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::marker::PhantomData;
-use stdweb::web::{document, INode, Node, TextNode};
-use html::{Component, Scope};
-use super::{Reform, VDiff, VNode};
+use stdweb::web::{document, Element, INode, Node, TextNode};
 
 /// A type for a virtual
 /// [`TextNode`](https://developer.mozilla.org/en-US/docs/Web/API/Document/createTextNode)
-/// represenation.
+/// representation.
 pub struct VText<COMP: Component> {
     /// Contains a text of the node.
     pub text: String,
@@ -32,9 +33,11 @@ impl<COMP: Component> VText<COMP> {
 impl<COMP: Component> VDiff for VText<COMP> {
     type Component = COMP;
 
-    /// Remove VTag from parent.
-    fn detach(&mut self, parent: &Node) -> Option<Node> {
-        let node = self.reference.take()
+    /// Remove VText from parent.
+    fn detach(&mut self, parent: &Element) -> Option<Node> {
+        let node = self
+            .reference
+            .take()
             .expect("tried to remove not rendered VText from DOM");
         let sibling = node.next_sibling();
         if parent.remove_child(&node).is_err() {
@@ -43,20 +46,20 @@ impl<COMP: Component> VDiff for VText<COMP> {
         sibling
     }
 
-    /// Renders virtual node over existent `TextNode`, but
-    /// only if value of text had changed.
-    /// Parameter `precursor` is necesssary for `VTag` and `VList` which
-    /// has children and renders them.
+    /// Renders virtual node over existing `TextNode`, but only if value of text had changed.
     fn apply(
         &mut self,
-        parent: &Node,
-        _: Option<&Node>,
-        opposite: Option<VNode<Self::Component>>,
+        parent: &Element,
+        previous_sibling: Option<&Node>,
+        ancestor: Option<VNode<Self::Component>>,
         _: &Scope<Self::Component>,
     ) -> Option<Node> {
-        assert!(self.reference.is_none(), "reference is ignored so must not be set");
+        assert!(
+            self.reference.is_none(),
+            "reference is ignored so must not be set"
+        );
         let reform = {
-            match opposite {
+            match ancestor {
                 // If element matched this type
                 Some(VNode::VText(mut vtext)) => {
                     self.reference = vtext.reference.take();
@@ -76,12 +79,18 @@ impl<COMP: Component> VDiff for VText<COMP> {
         };
         match reform {
             Reform::Keep => {}
-            Reform::Before(node) => {
+            Reform::Before(ancestor) => {
                 let element = document().create_text_node(&self.text);
-                if let Some(sibling) = node {
+                if let Some(ancestor) = ancestor {
                     parent
-                        .insert_before(&element, &sibling)
-                        .expect("can't insert text before sibling");
+                        .insert_before(&element, &ancestor)
+                        .expect("can't insert text before ancestor");
+                } else if let Some(next_sibling) =
+                    previous_sibling.and_then(|previous_sibling| previous_sibling.next_sibling())
+                {
+                    parent
+                        .insert_before(&element, &next_sibling)
+                        .expect("can't insert text before next_sibling");
                 } else {
                     parent.append_child(&element);
                 }

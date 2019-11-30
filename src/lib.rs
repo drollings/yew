@@ -8,8 +8,6 @@
 //! Minimal example:
 //!
 //! ```rust
-//! #[macro_use]
-//! extern crate yew;
 //! use yew::prelude::*;
 //!
 //! struct Model {
@@ -35,72 +33,77 @@
 //!         }
 //!         true
 //!     }
-//! }
 //!
-//! impl Renderable<Model> for Model {
 //!     fn view(&self) -> Html<Self> {
 //!         html! {
 //!             <div>
-//!                <button onclick=|_| Msg::DoIt,>{ "+1" }</button>
+//!                <button onclick=|_| Msg::DoIt>{ "+1" }</button>
 //!                 <p>{ self.value }</p>
 //!             </div>
 //!         }
 //!     }
 //! }
-//!
+//!# fn dont_execute() {
 //! fn main() {
 //!     yew::initialize();
 //!     App::<Model>::new().mount_to_body();
 //!     yew::run_loop();
 //! }
+//!# }
 //! ```
 //!
 
-#![deny(missing_docs, bare_trait_objects, anonymous_parameters, elided_lifetimes_in_paths)]
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    bare_trait_objects,
+    anonymous_parameters,
+    elided_lifetimes_in_paths
+)]
+#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 #![recursion_limit = "512"]
+extern crate self as yew;
 
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate log;
-extern crate http;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate bincode;
-extern crate anymap;
-extern crate slab;
-#[macro_use]
-extern crate stdweb;
-#[cfg(feature = "toml")]
-extern crate toml;
-#[cfg(feature = "yaml")]
-extern crate serde_yaml;
-#[cfg(feature = "msgpack")]
-extern crate rmp_serde;
-#[cfg(feature = "cbor")]
-extern crate serde_cbor;
+use proc_macro_hack::proc_macro_hack;
+/// This macro implements JSX-like templates.
+#[proc_macro_hack(support_nested)]
+pub use yew_macro::html;
 
-#[macro_use]
-pub mod macros;
+/// This module contains macros which implements html! macro and JSX-like templates
+pub mod macros {
+    pub use crate::html;
+    pub use yew_macro::Properties;
+}
+
+pub mod app;
+pub mod callback;
+pub mod components;
 pub mod format;
 pub mod html;
-pub mod app;
-pub mod prelude;
-pub mod services;
-pub mod virtual_dom;
-pub mod callback;
 pub mod scheduler;
+pub mod utils;
+pub mod virtual_dom;
+
+#[cfg(feature = "agent")]
 pub mod agent;
-pub mod components;
+#[cfg(feature = "services")]
+pub mod services;
 
-use std::rc::Rc;
-use std::cell::RefCell;
+/// The module that contains all events available in the framework.
+pub mod events {
+    pub use crate::html::{ChangeData, InputData};
 
-type Shared<T> = Rc<RefCell<T>>;
-
-struct Hidden;
+    pub use stdweb::web::event::{
+        BlurEvent, ClickEvent, ContextMenuEvent, DoubleClickEvent, DragDropEvent, DragEndEvent,
+        DragEnterEvent, DragEvent, DragExitEvent, DragLeaveEvent, DragOverEvent, DragStartEvent,
+        FocusEvent, GotPointerCaptureEvent, IKeyboardEvent, IMouseEvent, IPointerEvent,
+        KeyDownEvent, KeyPressEvent, KeyUpEvent, LostPointerCaptureEvent, MouseDownEvent,
+        MouseEnterEvent, MouseLeaveEvent, MouseMoveEvent, MouseOutEvent, MouseOverEvent,
+        MouseUpEvent, MouseWheelEvent, PointerCancelEvent, PointerDownEvent, PointerEnterEvent,
+        PointerLeaveEvent, PointerMoveEvent, PointerOutEvent, PointerOverEvent, PointerUpEvent,
+        ScrollEvent, SubmitEvent, TouchCancel, TouchEnd, TouchEnter, TouchMove, TouchStart,
+    };
+}
 
 /// Initializes yew framework. It should be called first.
 pub fn initialize() {
@@ -111,3 +114,56 @@ pub fn initialize() {
 pub fn run_loop() {
     stdweb::event_loop();
 }
+
+/// Starts an app mounted to a body of the document.
+pub fn start_app<COMP>()
+where
+    COMP: Component,
+    COMP::Properties: Default,
+{
+    initialize();
+    App::<COMP>::new().mount_to_body();
+    run_loop();
+}
+
+/// Starts an app mounted to a body of the document.
+pub fn start_app_with_props<COMP>(props: COMP::Properties)
+where
+    COMP: Component,
+{
+    initialize();
+    App::<COMP>::new().mount_to_body_with_props(props);
+    run_loop();
+}
+
+/// The Yew Prelude
+///
+/// The purpose of this module is to alleviate imports of many common types:
+///
+/// ```
+/// # #![allow(unused_imports)]
+/// use yew::prelude::*;
+/// ```
+pub mod prelude {
+    #[cfg(feature = "agent")]
+    pub use crate::agent::{Bridge, Bridged, Threaded};
+    pub use crate::app::App;
+    pub use crate::callback::Callback;
+    pub use crate::events::*;
+    pub use crate::html::{
+        Children, ChildrenWithProps, Component, ComponentLink, Href, Html, NodeRef, Properties,
+        Renderable, ShouldRender,
+    };
+    pub use crate::macros::*;
+    pub use crate::virtual_dom::Classes;
+
+    /// Prelude module for creating worker.
+    #[cfg(feature = "agent")]
+    pub mod worker {
+        pub use crate::agent::{
+            Agent, AgentLink, Bridge, Bridged, Context, Global, HandlerId, Job, Private, Public,
+        };
+    }
+}
+
+pub use self::prelude::*;

@@ -1,16 +1,26 @@
 //! This module contains the implementation of a service to
 //! request frame rendering
 
-use stdweb::Value;
+use crate::callback::Callback;
+use crate::services::Task;
+use std::fmt;
 use stdweb::unstable::TryInto;
-use services::Task;
-use callback::Callback;
+use stdweb::Value;
+#[allow(unused_imports)]
+use stdweb::{_js_impl, js};
 
 /// A handle to cancel a render task.
+#[must_use]
 pub struct RenderTask(Option<Value>);
 
+impl fmt::Debug for RenderTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RenderTask")
+    }
+}
+
 /// A service to request animation frames.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RenderService {}
 
 impl RenderService {
@@ -24,7 +34,7 @@ impl RenderService {
         let callback = move |v| {
             let time: f64 = match v {
                 Value::Number(n) => n.try_into().unwrap(),
-                _ => 0.0
+                _ => 0.0,
             };
             callback.emit(time);
         };
@@ -51,7 +61,7 @@ impl Task for RenderTask {
         let handle = self.0.take().expect("tried to cancel render twice");
         js! { @(no_return)
             var handle = @{handle};
-            cancelAnimationFrame(handle.timeout_id);
+            cancelAnimationFrame(handle.render_id);
             handle.callback.drop();
         }
     }

@@ -1,20 +1,42 @@
 //! Service to send HTTP-request to a server.
 
-use std::collections::HashMap;
-
-use stdweb::{Value, JsSerialize};
-use stdweb::web::ArrayBuffer;
-use stdweb::unstable::{TryInto, TryFrom};
-use stdweb::serde::Serde;
-
 use super::Task;
-use format::{Format, Text, Binary};
-use callback::Callback;
+use crate::callback::Callback;
+use crate::format::{Binary, Format, Text};
+use failure::Fail;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::fmt;
+use stdweb::serde::Serde;
+use stdweb::unstable::{TryFrom, TryInto};
+use stdweb::web::ArrayBuffer;
+use stdweb::{JsSerialize, Value};
+#[allow(unused_imports)]
+use stdweb::{_js_impl, js};
 
 pub use http::{HeaderMap, Method, Request, Response, StatusCode, Uri};
 
+/// Type to set cache for fetch.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum Cache {
+    /// `default` value of cache.
+    #[serde(rename = "default")]
+    DefaultCache,
+    /// `no-store` value of cache.
+    NoStore,
+    /// `reload` value of cache.
+    Reload,
+    /// `no-cache` value of cache.
+    NoCache,
+    /// `force-cache` value of cache
+    ForceCache,
+    /// `only-if-cached` value of cache
+    OnlyIfCached,
+}
+
 /// Type to set credentials for fetch.
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub enum Credentials {
     /// `omit` value of credentials.
@@ -25,12 +47,46 @@ pub enum Credentials {
     SameOrigin,
 }
 
+/// Type to set mode for fetch.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum Mode {
+    /// `same-origin` value of mode.
+    SameOrigin,
+    /// `no-cors` value of mode.
+    NoCors,
+    /// `cors` value of mode.
+    Cors,
+}
+
+/// Type to set redirect behaviour for fetch.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum Redirect {
+    /// `follow` value of redirect.
+    Follow,
+    /// `error` value of redirect.
+    Error,
+    /// `manual` value of redirect.
+    Manual,
+}
+
 /// Init options for `fetch()` function call.
 /// https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch
-#[derive(Serialize)]
+#[derive(Serialize, Default, Debug)]
 pub struct FetchOptions {
+    /// Cache of a fetch request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache: Option<Cache>,
     /// Credentials of a fetch request.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub credentials: Option<Credentials>,
+    /// Redirect behaviour of a fetch request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect: Option<Redirect>,
+    /// Request mode of a fetch request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
 }
 
 /// Represents errors of a fetch service.
@@ -41,10 +97,17 @@ enum FetchError {
 }
 
 /// A handle to control sent requests. Can be canceled with a `Task::cancel` call.
+#[must_use]
 pub struct FetchTask(Option<Value>);
 
+impl fmt::Debug for FetchTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("FetchTask")
+    }
+}
+
 /// A service to fetch resources.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FetchService {}
 
 impl FetchService {
@@ -59,46 +122,96 @@ impl FetchService {
     /// You may use a Request builder to build your request declaratively as on the
     /// following examples:
     ///
-    /// ```rust
-    ///    let post_request = Request::post("https://my.api/v1/resource")
-    ///            .header("Content-Type", "application/json")
-    ///            .body(Json(&json!({"foo": "bar"})))
-    ///            .expect("Failed to build request.");
+    /// ```
+    ///# use yew::format::{Nothing, Json};
+    ///# use yew::services::fetch::Request;
+    ///# use serde_json::json;
+    /// let post_request = Request::post("https://my.api/v1/resource")
+    ///     .header("Content-Type", "application/json")
+    ///     .body(Json(&json!({"foo": "bar"})))
+    ///     .expect("Failed to build request.");
     ///
-    ///    let get_request = Request::get("https://my.api/v1/resource")
-    ///            .body(Nothing)
-    ///            .expect("Failed to build request.");
+    /// let get_request = Request::get("https://my.api/v1/resource")
+    ///     .body(Nothing)
+    ///     .expect("Failed to build request.");
     /// ```
     ///
     /// The callback function can build a loop message by passing or analizing the
     /// response body and metadata.
     ///
-    /// ```rust
-    ///     context.web.fetch(
-    ///         post_request,
-    ///         |response| {
-    ///             if response.status().is_success() {
-    ///                 Msg::Noop
-    ///             } else {
-    ///                 Msg::Error
-    ///             }
+    /// ```
+    ///# use yew::{Component, ComponentLink, Html, Renderable};
+    ///# use yew::services::FetchService;
+    ///# use yew::services::fetch::{Response, Request};
+    ///# struct Comp;
+    ///# impl Component for Comp {
+    ///#     type Message = Msg;type Properties = ();
+    ///#     fn create(props: Self::Properties,link: ComponentLink<Self>) -> Self {unimplemented!()}
+    ///#     fn update(&mut self,msg: Self::Message) -> bool {unimplemented!()}
+    ///#     fn view(&self) -> Html<Comp> {unimplemented!()}
+    ///# }
+    ///# enum Msg {
+    ///#     Noop,
+    ///#     Error
+    ///# }
+    ///# fn dont_execute() {
+    ///# let mut link: ComponentLink<Comp> = unimplemented!();
+    ///# let mut fetch_service: FetchService = FetchService::new();
+    ///# let post_request: Request<Result<String, failure::Error>> = unimplemented!();
+    /// let task = fetch_service.fetch(
+    ///     post_request,
+    ///     link.send_back(|response: Response<Result<String, failure::Error>>| {
+    ///         if response.status().is_success() {
+    ///             Msg::Noop
+    ///         } else {
+    ///             Msg::Error
     ///         }
+    ///     }),
+    /// );
+    ///# }
     /// ```
     ///
-    /// One can also simply consume and pass the response or body object into
-    /// the message.
+    /// For a full example, you can specify that the response must be in the JSON format,
+    /// and be a specific serialized data type. If the mesage isn't Json, or isn't the specified
+    /// data type, then you will get a message indicating failure.
     ///
-    /// ```rust
-    ///     context.web.fetch(
-    ///         get_request,
-    ///         |response| {
-    ///             let (meta, Json(body)) = response.into_parts();
-    ///             if meta.status.is_success() {
-    ///                 Msg::FetchResourceComplete(body)
-    ///             } else {
-    ///                 Msg::FetchResourceFailed
-    ///             }
+    /// ```
+    ///# use yew::format::{Json, Nothing, Format};
+    ///# use yew::services::FetchService;
+    ///# use http::Request;
+    ///# use yew::services::fetch::Response;
+    ///# use yew::{Component, ComponentLink, Renderable, Html};
+    ///# use serde_derive::Deserialize;
+    ///# struct Comp;
+    ///# impl Component for Comp {
+    ///#     type Message = Msg;type Properties = ();
+    ///#     fn create(props: Self::Properties,link: ComponentLink<Self>) -> Self {unimplemented!()}
+    ///#     fn update(&mut self,msg: Self::Message) -> bool {unimplemented!()}
+    ///#     fn view(&self) -> Html<Comp> {unimplemented!()}
+    ///# }
+    ///# enum Msg {
+    ///#     FetchResourceComplete(Data),
+    ///#     FetchResourceFailed
+    ///# }
+    /// #[derive(Deserialize)]
+    /// struct Data {
+    ///    value: String
+    /// }
+    ///
+    ///# fn dont_execute() {
+    ///# let mut link: ComponentLink<Comp> = unimplemented!();
+    /// let get_request = Request::get("/thing").body(Nothing).unwrap();
+    /// let callback = link.send_back(|response: Response<Json<Result<Data, failure::Error>>>| {
+    ///     if let (meta, Json(Ok(body))) = response.into_parts() {
+    ///         if meta.status.is_success() {
+    ///             return Msg::FetchResourceComplete(body);
     ///         }
+    ///     }
+    ///     Msg::FetchResourceFailed
+    /// });
+    ///
+    /// let task = FetchService::new().fetch(get_request, callback);
+    ///# }
     /// ```
     ///
     pub fn fetch<IN, OUT: 'static>(
@@ -115,13 +228,33 @@ impl FetchService {
 
     /// `fetch` with provided `FetchOptions` object.
     /// Use it if you need to send cookies with a request:
-    /// ```rust
-    ///     let request = fetch::Request::get("/path/")
-    ///         .body(Nothing).unwrap();
-    ///     let options = FetchOptions {
-    ///         credentials: Some(Credentials::SameOrigin),
-    ///     };
-    ///     let task = fetch_service.fetch_with_options(request, options, callback);
+    /// ```
+    ///# use yew::format::Nothing;
+    ///# use yew::services::fetch::{self, FetchOptions, Credentials};
+    ///# use yew::{Renderable, Html, Component, ComponentLink};
+    ///# use yew::services::FetchService;
+    ///# use http::Response;
+    ///# struct Comp;
+    ///# impl Component for Comp {
+    ///#     type Message = Msg;
+    ///#     type Properties = ();
+    ///#     fn create(props: Self::Properties, link: ComponentLink<Self>) -> Self {unimplemented!()}
+    ///#     fn update(&mut self, msg: Self::Message) -> bool {unimplemented!()}
+    ///#     fn view(&self) -> Html<Comp> {unimplemented!()}
+    ///# }
+    ///# pub enum Msg {}
+    ///# fn dont_execute() {
+    ///# let mut link: ComponentLink<Comp> = unimplemented!();
+    ///# let callback = link.send_back(|response: Response<Result<String, failure::Error>>| unimplemented!());
+    /// let request = fetch::Request::get("/path/")
+    ///     .body(Nothing)
+    ///     .unwrap();
+    /// let options = FetchOptions {
+    ///     credentials: Some(Credentials::SameOrigin),
+    ///     ..FetchOptions::default()
+    /// };
+    /// let task = FetchService::new().fetch_with_options(request, options, callback);
+    ///# }
     /// ```
     pub fn fetch_with_options<IN, OUT: 'static>(
         &mut self,
@@ -186,9 +319,9 @@ where
         .map(|(k, v)| {
             (
                 k.as_str(),
-                v.to_str().expect(
-                    format!("Unparsable request header {}: {:?}", k.as_str(), v).as_str(),
-                ),
+                v.to_str().unwrap_or_else(|_| {
+                    panic!("Unparsable request header {}: {:?}", k.as_str(), v)
+                }),
             )
         })
         .collect();
@@ -219,6 +352,7 @@ where
         callback.emit(response);
     };
 
+    #[allow(clippy::too_many_arguments)]
     let handle = js! {
         var body = @{body};
         if (@{binary} && body != null) {
@@ -291,7 +425,8 @@ impl Task for FetchTask {
         // Fetch API doesn't support request cancelling in all browsers
         // and we should use this workaround with a flag.
         // In that case, request not canceled, but callback won't be called.
-        let handle = self.0
+        let handle = self
+            .0
             .take()
             .expect("tried to cancel request fetching twice");
         js! {  @(no_return)

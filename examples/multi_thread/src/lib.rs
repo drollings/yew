@@ -1,21 +1,18 @@
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate yew;
+#![recursion_limit = "128"]
 
-pub mod native_worker;
-pub mod job;
 pub mod context;
+pub mod job;
+pub mod native_worker;
 
-use yew::prelude::*;
+use log::info;
+use yew::worker::*;
+use yew::{html, Component, ComponentLink, Html, ShouldRender};
 
 pub struct Model {
-    worker: Box<Bridge<native_worker::Worker>>,
-    job: Box<Bridge<job::Worker>>,
-    context: Box<Bridge<context::Worker>>,
-    context_2: Box<Bridge<context::Worker>>,
+    worker: Box<dyn Bridge<native_worker::Worker>>,
+    job: Box<dyn Bridge<job::Worker>>,
+    context: Box<dyn Bridge<context::Worker>>,
+    context_2: Box<dyn Bridge<context::Worker>>,
 }
 
 pub enum Msg {
@@ -42,7 +39,12 @@ impl Component for Model {
         let callback = link.send_back(|_| Msg::DataReceived);
         let context_2 = context::Worker::bridge(callback);
 
-        Model { worker, job, context, context_2 }
+        Model {
+            worker,
+            job,
+            context,
+            context_2,
+        }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
@@ -63,19 +65,16 @@ impl Component for Model {
         }
         true
     }
-}
 
-impl Renderable<Model> for Model {
     fn view(&self) -> Html<Self> {
         html! {
             <div>
-                <nav class="menu",>
-                    <button onclick=|_| Msg::SendToWorker,>{ "Send to Thread" }</button>
-                    <button onclick=|_| Msg::SendToJob,>{ "Send to Job" }</button>
-                    <button onclick=|_| Msg::SendToContext,>{ "Send to Context" }</button>
+                <nav class="menu">
+                    <button onclick=|_| Msg::SendToWorker>{ "Send to Thread" }</button>
+                    <button onclick=|_| Msg::SendToJob>{ "Send to Job" }</button>
+                    <button onclick=|_| Msg::SendToContext>{ "Send to Context" }</button>
                 </nav>
             </div>
         }
     }
 }
-
